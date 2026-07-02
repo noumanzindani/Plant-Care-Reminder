@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers.dart';
 import 'router.dart';
+import 'sync_providers.dart';
 import 'theme/app_theme.dart';
 
 /// Root widget. Wires the router + theme, and reconciles reminders whenever the app
@@ -34,6 +35,9 @@ class _PlantCareAppState extends ConsumerState<PlantCareApp>
     if (state == AppLifecycleState.resumed) {
       // Fire-and-forget: recompute next-due and refill the rolling notification window.
       ref.read(reconcileCoordinatorProvider).reconcile();
+      // Opportunistic sync — a no-op unless signed in and online (SyncService gates it).
+      // Errors (offline flakiness) are swallowed; the next resume retries.
+      ref.read(syncServiceProvider).syncNow().catchError((_) => null);
     }
   }
 
