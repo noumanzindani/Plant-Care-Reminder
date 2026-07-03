@@ -57,6 +57,23 @@ class RoomsRepository {
         .watch();
   }
 
+  /// Set a room's outdoor flag — the location prior the weather overlay reads. The caller
+  /// reconciles, since weather-sensitive schedules of plants in this room may shift.
+  Future<void> setRoomOutdoor({required String roomId, required bool outdoor}) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.rooms)..where((r) => r.id.equals(roomId))).write(
+        RoomsCompanion(
+          outdoor: Value(outdoor),
+          updatedAt: Value(now),
+        ),
+      );
+      final row =
+          await (_db.select(_db.rooms)..where((r) => r.id.equals(roomId))).getSingle();
+      await _outbox.upsert('rooms', roomId, row.toJson(), now);
+    });
+  }
+
   /// Assign [plantId] to [roomId] (pass null to clear the room). `Value(roomId)` writes
   /// the value — including null — rather than leaving the column untouched.
   Future<void> assignPlantToRoom({required String plantId, String? roomId}) async {

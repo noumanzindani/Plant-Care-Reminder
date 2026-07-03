@@ -13,6 +13,7 @@ class CareQueueItem {
     required this.nickname,
     required this.type,
     required this.nextDueAt,
+    this.weatherSensitive = false,
   });
 
   final String plantId;
@@ -20,6 +21,10 @@ class CareQueueItem {
   final String nickname;
   final CareType type;
   final DateTime? nextDueAt;
+
+  /// Whether this schedule opts into the weather-adaptive overlay (drives the detail
+  /// screen's toggle). Only acts when the plant's room is also outdoor.
+  final bool weatherSensitive;
 }
 
 /// A read model for one entry in the care journal (a care log + its plant's nickname).
@@ -198,6 +203,22 @@ class CareRepository {
     });
   }
 
+  /// Opt a schedule in or out of the weather-adaptive overlay. Writes the flag; the caller
+  /// reconciles (the projected due date may shift). Note the overlay only *acts* when the
+  /// plant's room is also marked outdoor — indoors, this flag is inert by design.
+  Future<void> setWeatherSensitive(String scheduleId, bool value) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.careSchedules)..where((s) => s.id.equals(scheduleId))).write(
+        CareSchedulesCompanion(
+          weatherSensitive: Value(value),
+          updatedAt: Value(now),
+        ),
+      );
+      await _enqueueSchedule(scheduleId, now);
+    });
+  }
+
   /// Live list of one plant's active care schedules (all its care types), soonest-due
   /// first — the plant detail screen.
   Stream<List<CareQueueItem>> watchPlantSchedules(String plantId) {
@@ -243,6 +264,7 @@ class CareRepository {
             nickname: row.readTable(_db.userPlants).nickname,
             type: row.readTable(_db.careSchedules).type,
             nextDueAt: row.readTable(_db.careSchedules).nextDueAt,
+            weatherSensitive: row.readTable(_db.careSchedules).weatherSensitive,
           ),
       ];
 

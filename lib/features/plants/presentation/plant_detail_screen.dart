@@ -29,6 +29,7 @@ class PlantDetailScreen extends ConsumerWidget {
         children: [
           _SpeciesTile(plantId: plantId),
           _RoomTile(plantId: plantId),
+          _OutdoorTile(plantId: plantId),
           const Divider(height: 1),
           Expanded(
             child: schedules.when(
@@ -219,6 +220,40 @@ class _RoomTile extends ConsumerWidget {
   }
 }
 
+/// The outdoor flag of the plant's *room* — the location prior the weather overlay reads.
+/// Outdoor is a property of the room (a balcony is outdoors for every plant on it), so the
+/// toggle only appears once a room is assigned; toggling it affects that whole room.
+class _OutdoorTile extends ConsumerWidget {
+  const _OutdoorTile({required this.plantId});
+
+  final String plantId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final roomId = ref.watch(plantProvider(plantId)).asData?.value?.roomId;
+    if (roomId == null) return const SizedBox.shrink(); // no room → nothing to mark outdoor
+
+    final rooms = ref.watch(roomsProvider).asData?.value ?? const <Room>[];
+    final match = rooms.where((r) => r.id == roomId);
+    if (match.isEmpty) return const SizedBox.shrink();
+    final room = match.first;
+
+    return SwitchListTile(
+      secondary: Icon(Icons.wb_cloudy_outlined,
+          color: Theme.of(context).colorScheme.primary),
+      title: const Text('Outdoor'),
+      subtitle: Text('“${room.name}” gets local weather'),
+      value: room.outdoor,
+      onChanged: (v) => _setOutdoor(ref, room.id, v),
+    );
+  }
+
+  Future<void> _setOutdoor(WidgetRef ref, String roomId, bool value) async {
+    await ref.read(roomsRepositoryProvider).setRoomOutdoor(roomId: roomId, outdoor: value);
+    await ref.read(reconcileCoordinatorProvider).reconcile();
+  }
+}
+
 /// Bottom sheet to pick, clear, or create the plant's room.
 class _RoomPickerSheet extends ConsumerStatefulWidget {
   const _RoomPickerSheet({required this.plantId, required this.currentRoomId});
@@ -332,20 +367,42 @@ class _ScheduleTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
-      leading: Icon(careTypeIcon(item.type), color: Theme.of(context).colorScheme.primary),
-      title: Text(careVerb(item.type)),
-      subtitle: Text(_dueText(item.nextDueAt)),
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'Remove care type',
-        onPressed: () => _remove(ref),
-      ),
+    return Column(
+      children: [
+        ListTile(
+          leading:
+              Icon(careTypeIcon(item.type), color: Theme.of(context).colorScheme.primary),
+          title: Text(careVerb(item.type)),
+          subtitle: Text(_dueText(item.nextDueAt)),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Remove care type',
+            onPressed: () => _remove(ref),
+          ),
+        ),
+        // Weather adaptation only makes sense for watering (rain/heat/humidity shift when
+        // the soil needs water); other care types don't read the forecast.
+        if (item.type == CareType.water)
+          SwitchListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 72, right: 16),
+            title: const Text('Weather-adaptive'),
+            subtitle: const Text('Shift with local rain & heat (outdoor plants only)'),
+            value: item.weatherSensitive,
+            onChanged: (v) => _setWeather(ref, v),
+          ),
+        const Divider(height: 1),
+      ],
     );
   }
 
   Future<void> _remove(WidgetRef ref) async {
     await ref.read(careRepositoryProvider).deactivateSchedule(item.scheduleId);
+    await ref.read(reconcileCoordinatorProvider).reconcile();
+  }
+
+  Future<void> _setWeather(WidgetRef ref, bool value) async {
+    await ref.read(careRepositoryProvider).setWeatherSensitive(item.scheduleId, value);
     await ref.read(reconcileCoordinatorProvider).reconcile();
   }
 

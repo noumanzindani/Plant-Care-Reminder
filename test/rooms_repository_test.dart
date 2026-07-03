@@ -101,4 +101,22 @@ void main() {
     expect(outbox.single.entityId, plantId);
     expect(outbox.single.op, 'upsert');
   });
+
+  // --- Slice 5.x: outdoor toggle exposes the weather overlay's location prior ---------
+
+  test('setRoomOutdoor flips the flag and enqueues an Outbox upsert', () async {
+    final roomId = await rooms.addRoom(name: 'Balcony'); // outdoor defaults to false
+    await db.delete(db.outboxEntries).go(); // isolate the toggle's entry
+
+    await rooms.setRoomOutdoor(roomId: roomId, outdoor: true);
+
+    final room = await (db.select(db.rooms)..where((r) => r.id.equals(roomId))).getSingle();
+    expect(room.outdoor, isTrue);
+
+    final outbox = await db.select(db.outboxEntries).get();
+    expect(outbox, hasLength(1));
+    expect(outbox.single.entity, 'rooms');
+    expect(outbox.single.entityId, roomId);
+    expect(outbox.single.op, 'upsert');
+  });
 }

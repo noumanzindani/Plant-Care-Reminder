@@ -328,6 +328,42 @@ void main() {
     expect(await db.select(db.careSchedules).get(), isEmpty);
     expect(await db.select(db.outboxEntries).get(), isEmpty);
   });
+
+  // --- Slice 5.x: per-schedule weather-adaptive toggle ------------------------------
+
+  test('setWeatherSensitive flips the flag and enqueues an Outbox upsert', () async {
+    await repo.addWateringPlant(
+        nickname: 'Fern', intervalDays: 7, timeOfDayMinutes: 540, tzId: 'UTC');
+    final schedule = (await db.select(db.careSchedules).get()).single;
+    expect(schedule.weatherSensitive, isFalse); // off by default
+    await db.delete(db.outboxEntries).go(); // isolate the toggle's entry
+
+    await repo.setWeatherSensitive(schedule.id, true);
+
+    final updated =
+        (await db.select(db.careSchedules).get()).single;
+    expect(updated.weatherSensitive, isTrue);
+
+    final outbox = await db.select(db.outboxEntries).get();
+    expect(outbox, hasLength(1));
+    expect(outbox.single.entity, 'care_schedules');
+    expect(outbox.single.entityId, schedule.id);
+    expect(outbox.single.op, 'upsert');
+  });
+
+  test('watchPlantSchedules surfaces the weatherSensitive flag for the UI', () async {
+    final plantId = await repo.addWateringPlant(
+        nickname: 'Fern', intervalDays: 7, timeOfDayMinutes: 540, tzId: 'UTC');
+    final scheduleId = (await db.select(db.careSchedules).get()).single.id;
+
+    // Off by default…
+    expect((await repo.watchPlantSchedules(plantId).first).single.weatherSensitive, isFalse);
+
+    await repo.setWeatherSensitive(scheduleId, true);
+
+    // …and the toggle is reflected in the read model the detail screen renders from.
+    expect((await repo.watchPlantSchedules(plantId).first).single.weatherSensitive, isTrue);
+  });
 }
 
 /// A [Uuid] whose `v7()` returns `plant-id` on the first call and `schedule-id` on every

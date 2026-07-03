@@ -143,4 +143,87 @@ void main() {
     expect(find.text('Bright light'), findsNothing);
     expect(find.text('Pet-safe'), findsNothing);
   });
+
+  testWidgets('plant detail shows weather toggles ON for an outdoor water schedule',
+      (tester) async {
+    final plant = UserPlant(
+      id: 'p1',
+      nickname: 'Balcony basil',
+      roomId: 'r1',
+      status: PlantStatus.active,
+      version: 0,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      sync: SyncState.localOnly,
+    );
+    final room = Room(
+      id: 'r1',
+      name: 'Balcony',
+      outdoor: true,
+      sortOrder: 0,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      sync: SyncState.localOnly,
+    );
+    final items = [
+      CareQueueItem(
+        plantId: 'p1',
+        scheduleId: 's1',
+        nickname: 'Balcony basil',
+        type: CareType.water,
+        nextDueAt: DateTime.now(),
+        weatherSensitive: true,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          plantProvider('p1').overrideWith((ref) => Stream<UserPlant?>.value(plant)),
+          plantSchedulesProvider('p1').overrideWith((ref) => Stream.value(items)),
+          roomsProvider.overrideWith((ref) => Stream.value([room])),
+        ],
+        child: const MaterialApp(home: PlantDetailScreen(plantId: 'p1')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    // Per-schedule weather toggle (water only) and the room's outdoor toggle both render…
+    expect(find.text('Weather-adaptive'), findsOneWidget);
+    expect(find.text('Outdoor'), findsOneWidget);
+    // …and both reflect the ON state from the read model.
+    final switches =
+        tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
+    expect(switches, hasLength(2));
+    expect(switches.every((s) => s.value == true), isTrue);
+  });
+
+  testWidgets('no weather toggle on a non-water care type', (tester) async {
+    final items = [
+      CareQueueItem(
+        plantId: 'p1',
+        scheduleId: 's1',
+        nickname: 'Monstera',
+        type: CareType.fertilize,
+        nextDueAt: DateTime.now(),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          plantProvider('p1').overrideWith((ref) => Stream<UserPlant?>.value(null)),
+          plantSchedulesProvider('p1').overrideWith((ref) => Stream.value(items)),
+          roomsProvider.overrideWith((ref) => Stream.value(const <Room>[])),
+        ],
+        child: const MaterialApp(home: PlantDetailScreen(plantId: 'p1')),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Fertilize'), findsOneWidget);
+    expect(find.text('Weather-adaptive'), findsNothing); // watering-only affordance
+  });
 }
