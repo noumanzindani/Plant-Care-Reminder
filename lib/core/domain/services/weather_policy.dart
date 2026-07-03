@@ -1,25 +1,10 @@
 import 'package:timezone/timezone.dart' as tz;
 
-/// A minimal weather summary the care policy reasons about. Pure value object with no
-/// Flutter/HTTP dependencies — the `WeatherPort` adapter (Open-Meteo) maps its response
-/// into this, so the policy never knows about the provider's JSON schema. The lookahead
-/// window (how far ahead the rain/temperature is summarised) is the adapter's concern.
-class WeatherForecast {
-  const WeatherForecast({
-    required this.expectedRainMm,
-    required this.highTempC,
-    required this.humidityPct,
-  });
+import '../value_objects/weather_forecast.dart';
 
-  /// Total expected rainfall over the lookahead window, in millimetres.
-  final double expectedRainMm;
-
-  /// Forecast daily high temperature, in degrees Celsius.
-  final double highTempC;
-
-  /// Forecast relative humidity as a percentage (0..100).
-  final double humidityPct;
-}
+// Re-exported so existing importers of this file keep resolving [WeatherForecast]; new
+// callers (e.g. the WeatherPort) import the value object directly.
+export '../value_objects/weather_forecast.dart';
 
 /// Shifts a care task's base due instant earlier or later based on the forecast, so
 /// watering tracks real conditions rather than a fixed calendar. This is an overlay
