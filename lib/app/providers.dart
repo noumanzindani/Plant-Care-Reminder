@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/data/catalog/catalog_seeder.dart';
@@ -7,9 +8,15 @@ import '../core/data/db/database_provider.dart';
 import '../core/data/reminders/reconcile_coordinator.dart';
 import '../core/data/repositories/care_repository.dart';
 import '../core/data/repositories/rooms_repository.dart';
+import '../core/data/weather/caching_weather_port.dart';
+import '../core/data/weather/open_meteo_weather_adapter.dart';
+import '../core/domain/ports/location_port.dart';
 import '../core/domain/ports/notification_port.dart';
 import '../core/domain/ports/species_catalog_port.dart';
+import '../core/domain/ports/weather_port.dart';
+import '../core/infra/location/geolocator_location_adapter.dart';
 import '../core/infra/notifications/local_notifications_adapter.dart';
+import '../core/infra/time/system_clock.dart';
 
 /// The concrete notifications adapter (exposes init/requestPermissions for bootstrap).
 final notificationAdapterProvider =
@@ -36,11 +43,27 @@ final speciesCatalogProvider = Provider<SpeciesCatalogPort>(
 final catalogSeederProvider =
     Provider<CatalogSeeder>((ref) => CatalogSeeder(ref.watch(appDatabaseProvider)));
 
-/// The reminder engine's single entry point.
+/// The device's coarse location, behind its port (geolocator adapter).
+final locationPortProvider =
+    Provider<LocationPort>((ref) => const GeolocatorLocationAdapter());
+
+/// The weather source for the adaptive-care overlay: Open-Meteo (free, keyless) over a
+/// dedicated Dio (no auth interceptor — this is a public API), fronted by a TTL cache so
+/// bursts of reconciles share one forecast. Any failure yields null → base cadence.
+final weatherPortProvider = Provider<WeatherPort>(
+  (ref) => CachingWeatherPort(
+    OpenMeteoWeatherAdapter(Dio(), ref.watch(locationPortProvider)),
+    const SystemClock(),
+  ),
+);
+
+/// The reminder engine's single entry point. The weather port flows in here, so every
+/// reconcile the foreground app runs applies the weather overlay to sensitive schedules.
 final reconcileCoordinatorProvider = Provider<ReconcileCoordinator>(
   (ref) => ReconcileCoordinator(
     db: ref.watch(appDatabaseProvider),
     port: ref.watch(notificationPortProvider),
+    weather: ref.watch(weatherPortProvider),
   ),
 );
 

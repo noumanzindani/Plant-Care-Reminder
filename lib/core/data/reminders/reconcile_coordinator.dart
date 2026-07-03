@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../domain/ports/notification_port.dart';
+import '../../domain/ports/weather_port.dart';
 import '../../domain/services/cadence_engine.dart';
 import '../../domain/services/reconciler.dart';
 import '../../infra/notifications/reminder_applier.dart';
@@ -21,10 +22,11 @@ class ReconcileCoordinator {
     required NotificationPort port,
     CadenceEngine engine = const CadenceEngine(),
     Reconciler reconciler = const Reconciler(),
+    WeatherPort? weather,
   })  : _db = db,
         _reconciler = reconciler,
         _applier = ReminderApplier(port),
-        _builder = OccurrenceBuilder(db, engine);
+        _builder = OccurrenceBuilder(db, engine, weather: weather);
 
   final AppDatabase _db;
   final Reconciler _reconciler;
